@@ -39,3 +39,15 @@
 - Temporary `AskClaudePanel` on the Dashboard for E2E smoke; uses a "concise Jarvis" system prompt.
 - End-to-end verified in browser: prompt "how's my day look like?" returned a coherent Claude reply.
 - Edge function logs show POST 200 in ~2-4 s including CORS preflight.
+
+## 2026-05-12 — Phase 5a: chat persistence
+- New table `chat_messages` (id, user_id, role, content, model, tokens_input, tokens_output, created_at). RLS-enabled with own-row select/insert/delete. No update — messages are immutable.
+- Index `chat_messages_user_created_idx` on (user_id, created_at desc) for fast history loads.
+- Migration: `supabase/migrations/20260512000200_chat_messages.sql`.
+- TS types regenerated; `chat_messages` row + insert types now available.
+- New `ChatPanel` component (`src/components/chat/ChatPanel.tsx`) replaces the temporary AskClaudePanel:
+  - Loads last 30 messages on mount, ordered ascending.
+  - Optimistic user-message insert, then persists, then calls Claude with last 12 messages of context, then persists the assistant reply.
+  - Records model + input/output token usage.
+  - "Clear history" deletes all of the user's chat rows (RLS-scoped).
+  - Auto-scroll to latest message.
