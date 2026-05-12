@@ -23,3 +23,10 @@
 - Unique constraints: (user_id, provider), (user_id, message_id), (user_id, workspace_id, channel_id, message_ts), (user_id, event_id).
 - Idempotent migration checked in: `supabase/migrations/20260512000000_init_schema.sql`.
 - TS types generated via MCP into `src/types/database.ts`. `supabaseClient` typed with `createClient<Database>`.
+
+## 2026-05-12 — Phase 4a: User profile trigger
+- `handle_new_user()` function (`security definer`, owner = postgres) inserts a `public.users` row on every `auth.users` insert.
+- Trigger `on_auth_user_created` after insert on `auth.users`.
+- Backfill query covered any pre-existing auth users (0 at apply time).
+- Migration: `supabase/migrations/20260512000100_user_profile_trigger.sql`.
+- Dev server smoke: boots in 167ms, serves `<html class="dark">` with title `Jarvis Control Center`.
