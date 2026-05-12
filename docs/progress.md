@@ -30,3 +30,12 @@
 - Backfill query covered any pre-existing auth users (0 at apply time).
 - Migration: `supabase/migrations/20260512000100_user_profile_trigger.sql`.
 - Dev server smoke: boots in 167ms, serves `<html class="dark">` with title `Jarvis Control Center`.
+- Live signup smoke: `peterkgumapac@gmail.com` (id `3e44b0c2-…`) created an `auth.users` row, trigger fired, matching `public.users` row appeared with `email_confirmed = true`.
+
+## 2026-05-12 — Phase 4b: Claude edge function
+- `supabase/functions/claude/index.ts`: Deno edge function deployed to project `xbanzimrojdsskavdvkk`, status ACTIVE v2, `verify_jwt = true`.
+- `ANTHROPIC_API_KEY` set as Supabase secret (server-side only).
+- `src/lib/claudeClient.ts`: `invokeClaude()` browser wrapper via `supabase.functions.invoke`, typed request/response with `extractText()` helper.
+- Temporary `AskClaudePanel` on the Dashboard for E2E smoke; uses a "concise Jarvis" system prompt.
+- End-to-end verified in browser: prompt "how's my day look like?" returned a coherent Claude reply.
+- Edge function logs show POST 200 in ~2-4 s including CORS preflight.
