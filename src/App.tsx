@@ -3,6 +3,7 @@ import { Navigate, Route, Routes } from "react-router-dom"
 import { AuthProvider, useAuth } from "@/hooks/useAuth"
 import { Login } from "@/pages/Login"
 import { Dashboard } from "@/pages/Dashboard"
+import { Connections } from "@/pages/Connections"
 
 function LoadingScreen() {
   return (
@@ -44,6 +45,14 @@ export function App() {
           element={
             <ProtectedRoute>
               <Dashboard />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/connections"
+          element={
+            <ProtectedRoute>
+              <Connections />
             </ProtectedRoute>
           }
         />

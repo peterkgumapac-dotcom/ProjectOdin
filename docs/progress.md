@@ -51,3 +51,29 @@
   - Records model + input/output token usage.
   - "Clear history" deletes all of the user's chat rows (RLS-scoped).
   - Auto-scroll to latest message.
+
+## 2026-05-12 — Phase 6: Connectors hub + Google bundle (Gmail + Calendar; Drive deferred)
+- New table `auth_state` (CSRF state for OAuth handshakes). Migration `supabase/migrations/20260512000300_auth_state.sql`.
+- `supabase/config.toml` created with `verify_jwt = false` for `oauth-callback-{google,slack,spotify}`.
+- Shared edge function helpers in `supabase/functions/_shared/`:
+  - `cors.ts` — CORS + JSON response helpers
+  - `supabase_admin.ts` — service-role client + `getCallerUserId(req)` JWT verifier
+  - `oauth_state.ts` — `createAuthState`, `consumeAuthState` (TTL 10 min)
+  - `connected_accounts.ts` — token get/upsert/refresh helpers, `isExpired`
+  - `google.ts` — `getFreshGoogleTokens(userId)` with auto-refresh, `googleFetchJson`
+- Edge functions:
+  - `oauth-start-google` — JWT-required; persists CSRF state, returns Google authorize URL with `access_type=offline + prompt=consent` (forces refresh_token).
+  - `oauth-callback-google` — `verify_jwt = false`; validates state, exchanges code, upserts `connected_accounts`, redirects to `/connections?provider=google&status=ok`.
+  - `gmail-proxy` — actions: `list_messages`, `get_message`, `search`, `unread_count`, `profile`. Write actions (`send_message`, `mark_read`, `archive`, `add_label`) return 403 until consent expands.
+  - `calendar-proxy` — actions: `today_events`, `range_events`, `list_calendars`. Write actions return 403.
+  - `drive-proxy` — actions: `search_files`, `list_recent`, `get_file_metadata`. Will 401 until `drive.readonly` added to consent screen.
+- Browser:
+  - `src/lib/connectors/{google,gmail,calendar,drive,proxy}.ts` — typed clients.
+  - `src/hooks/useConnectedAccounts.ts` — accounts state with focus-refresh.
+  - `src/hooks/useUnreadEmailCount.ts`, `src/hooks/useTodayEvents.ts` — polling hooks (60 s).
+  - `src/components/connectors/ProviderCard.tsx` — shared card shell.
+  - `src/pages/Connections.tsx` — hub page with callback banners.
+  - `src/App.tsx` — added `/connections` protected route.
+  - `src/pages/Dashboard.tsx` — wired real Email + Calendar cards; nav header.
+- Scope set requested: openid, email, profile, gmail.readonly, calendar.readonly (matches Google consent screen). Write scopes + Drive deferred.
+- v1 build: 498 KB JS / 145 KB gzipped. Bundle stays within app-page budget.

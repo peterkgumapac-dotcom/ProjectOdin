@@ -1,0 +1,13 @@
+project_id = "xbanzimrojdsskavdvkk"
+
+# OAuth callback endpoints cannot require Supabase JWT — the third-party
+# provider hits them. CSRF is enforced via the `auth_state` table.
+
+[functions.oauth-callback-google]
+verify_jwt = false
+
+[functions.oauth-callback-slack]
+verify_jwt = false
+
+[functions.oauth-callback-spotify]
+verify_jwt = false
