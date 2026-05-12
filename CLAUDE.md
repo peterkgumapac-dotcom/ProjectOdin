@@ -13,10 +13,10 @@ React + Vite + TypeScript + Tailwind + shadcn/ui frontend. Supabase for Postgres
 TypeScript strict mode, functional components, named exports. Tailwind utilities, shadcn/ui primitives. No em dashes, no bullet points in user-facing copy.
 
 ## Current Phase
-Phase 1: Foundation. Vite scaffold, Supabase auth, login screen, dashboard skeleton with four sections (Email, Slack, Calendar, Today).
+Phase 3 done: schema live in Supabase + migration file checked in. Next up Phase 4: insert-after-signup trigger on auth.users → public.users, plus first user-facing data flows.
 
 ## Database Tables
-users, connected_accounts, emails, slack_messages, calendar_events, personal_routines, priority_rules. RLS scoped by user_id.
+users, connected_accounts, emails, slack_messages, calendar_events, personal_routines, priority_rules. RLS scoped by user_id. Migration: `supabase/migrations/20260512000000_init_schema.sql`. TS types: `src/types/database.ts` (regenerate via Supabase MCP `generate_typescript_types` after schema changes).
 
 ## Security
 ANTHROPIC_API_KEY is server-side only. Never expose via VITE_ prefix. All Claude calls go through Supabase Edge Functions, not the browser.
