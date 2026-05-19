@@ -18,6 +18,10 @@ export interface CalendarEvent {
   }>
   organizer?: { email?: string; displayName?: string }
   status?: string
+  sourceAccountId?: string
+  sourceAccountLabel?: string
+  sourceCalendarId?: string
+  sourceCalendarSummary?: string
 }
 
 export interface CalendarEventsResponse {
@@ -29,6 +33,7 @@ export interface CalendarListEntry {
   id: string
   summary: string
   primary?: boolean
+  selected?: boolean
   timeZone?: string
 }
 
@@ -36,16 +41,48 @@ export interface CalendarListResponse {
   items?: CalendarListEntry[]
 }
 
-export function todayEvents(timezone?: string) {
-  return invokeProxy<CalendarEventsResponse>(FN, "today_events", {
-    timezone: timezone ?? Intl.DateTimeFormat().resolvedOptions().timeZone,
-  })
+export interface CalendarEventDateTime {
+  date?: string
+  dateTime?: string
+  timeZone?: string
 }
 
-export function rangeEvents(timeMin: string, timeMax: string) {
-  return invokeProxy<CalendarEventsResponse>(FN, "range_events", { timeMin, timeMax })
+export interface CreateCalendarEventInput {
+  calendarId?: string
+  summary: string
+  description?: string
+  location?: string
+  start: CalendarEventDateTime
+  end: CalendarEventDateTime
 }
 
-export function listCalendars() {
-  return invokeProxy<CalendarListResponse>(FN, "list_calendars")
+export function todayEvents(timezone?: string, accountId?: string | null) {
+  return invokeProxy<CalendarEventsResponse>(
+    FN,
+    "today_events",
+    { timezone: timezone ?? Intl.DateTimeFormat().resolvedOptions().timeZone },
+    accountId ?? null
+  )
+}
+
+export function rangeEvents(
+  timeMin: string,
+  timeMax: string,
+  accountId?: string | null,
+  maxResults = 25
+) {
+  return invokeProxy<CalendarEventsResponse>(
+    FN,
+    "range_events",
+    { timeMin, timeMax, maxResults },
+    accountId ?? null
+  )
+}
+
+export function listCalendars(accountId?: string | null) {
+  return invokeProxy<CalendarListResponse>(FN, "list_calendars", {}, accountId ?? null)
+}
+
+export function createEvent(input: CreateCalendarEventInput, accountId?: string | null) {
+  return invokeProxy<CalendarEvent>(FN, "create_event", { ...input }, accountId ?? null)
 }

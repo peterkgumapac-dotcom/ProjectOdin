@@ -3,7 +3,7 @@
 import {
   getProviderTokens,
   isExpired,
-  updateAccessToken,
+  updateAccessTokenById,
   type ProviderTokens,
 } from "./connected_accounts.ts"
 
@@ -53,21 +53,32 @@ async function refreshAccessToken(refreshToken: string): Promise<{
   }
 }
 
-export async function getFreshGoogleTokens(userId: string): Promise<ProviderTokens> {
-  const tokens = await getProviderTokens(userId, PROVIDER)
+/**
+ * Resolve fresh tokens for a specific Google account.
+ *
+ * - `accountId` is the connected_accounts row id (preferred).
+ * - When omitted, falls back to the user's primary Google account, or the
+ *   oldest one if no primary is flagged.
+ */
+export async function getFreshGoogleTokens(
+  userId: string,
+  accountId?: string | null
+): Promise<ProviderTokens> {
+  const tokens = await getProviderTokens(userId, PROVIDER, accountId ?? null)
   if (!tokens) {
     throw new Error("Google account not connected for this user")
   }
   if (!isExpired(tokens)) return tokens
 
   if (!tokens.refresh_token) {
-    throw new Error("Access token expired and no refresh_token available — reconnect required")
+    throw new Error(
+      "Access token expired and no refresh_token available — reconnect required"
+    )
   }
 
   const refreshed = await refreshAccessToken(tokens.refresh_token)
-  await updateAccessToken(
-    userId,
-    PROVIDER,
+  await updateAccessTokenById(
+    tokens.id,
     refreshed.access_token,
     refreshed.expires_at,
     refreshed.refresh_token
@@ -83,9 +94,10 @@ export async function getFreshGoogleTokens(userId: string): Promise<ProviderToke
 export async function googleFetch(
   userId: string,
   url: string,
-  init: RequestInit = {}
+  init: RequestInit = {},
+  accountId?: string | null
 ): Promise<Response> {
-  const tokens = await getFreshGoogleTokens(userId)
+  const tokens = await getFreshGoogleTokens(userId, accountId ?? null)
   const headers = new Headers(init.headers ?? {})
   headers.set("Authorization", `Bearer ${tokens.access_token}`)
   if (init.body && !headers.has("content-type")) {
@@ -97,9 +109,10 @@ export async function googleFetch(
 export async function googleFetchJson<T>(
   userId: string,
   url: string,
-  init: RequestInit = {}
+  init: RequestInit = {},
+  accountId?: string | null
 ): Promise<T> {
-  const res = await googleFetch(userId, url, init)
+  const res = await googleFetch(userId, url, init, accountId ?? null)
   if (!res.ok) {
     const text = await res.text()
     throw new Error(`Google API ${res.status}: ${text.slice(0, 500)}`)

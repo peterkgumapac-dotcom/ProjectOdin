@@ -1,31 +1,70 @@
 import { useEffect, useMemo, useState } from "react"
 import { Link, useSearchParams } from "react-router-dom"
+import { Plus, Settings as SettingsIcon, Star } from "lucide-react"
 import { useAuth } from "@/hooks/useAuth"
 import {
   useConnectedAccounts,
   type ConnectedAccount,
+  type Provider,
 } from "@/hooks/useConnectedAccounts"
-import { connectGoogle, disconnectGoogle, GOOGLE_PROVIDER } from "@/lib/connectors/google"
+import { connectGoogle, disconnectGoogle } from "@/lib/connectors/google"
+import { connectSlack, disconnectSlack } from "@/lib/connectors/slack"
+import {
+  connectWithings,
+  disconnectWithings,
+} from "@/lib/connectors/withings"
+import { connectSpotify, disconnectSpotify } from "@/lib/connectors/spotify"
+import { odinRouteUrl } from "@/lib/desktopRoute"
 import { Button } from "@/components/ui/button"
-import { ProviderCard } from "@/components/connectors/ProviderCard"
+import {
+  LightPageHeader,
+  LightPageShell,
+} from "@/components/dashboard/LightPageChrome"
+import { AddAccountDialog } from "@/components/connectors/AddAccountDialog"
+import { WorkflowEditor } from "@/components/connectors/WorkflowEditor"
 
 interface CallbackBanner {
   kind: "ok" | "error"
   text: string
 }
 
-function readBanner(provider: string | null, status: string | null, reason: string | null): CallbackBanner | null {
-  if (!provider || !status) return null
-  if (status === "ok") {
-    return { kind: "ok", text: `${provider} connected successfully.` }
+function friendlyConnectionReason(provider: string, reason: string | null): string {
+  if (!reason) return ""
+  if (
+    provider === "spotify" &&
+    (reason === "spotify_user_not_allowlisted_or_premium_required" ||
+      reason === "profile_fetch_failed")
+  ) {
+    return "Spotify blocked the profile check. Add this Spotify account under the ODIN app's Users Management allowlist and make sure the app owner has Spotify Premium, then reconnect."
   }
+  if (provider === "spotify" && reason === "spotify_profile_unauthorized") {
+    return "Spotify rejected the profile token. Reconnect Spotify and approve ODIN's requested access."
+  }
+  if (provider === "spotify" && reason === "spotify_rate_limited") {
+    return "Spotify rate-limited the profile check. Wait a minute, then reconnect."
+  }
+  return reason
+}
+
+function readBanner(
+  provider: string | null,
+  status: string | null,
+  reason: string | null
+): CallbackBanner | null {
+  if (!provider || !status) return null
+  const providerLabel =
+    provider === "spotify" ? "Spotify" : provider.charAt(0).toUpperCase() + provider.slice(1)
+  if (status === "ok") {
+    return { kind: "ok", text: `${providerLabel} connected successfully.` }
+  }
+  const friendlyReason = friendlyConnectionReason(provider, reason)
   return {
     kind: "error",
-    text: `${provider} connection failed${reason ? `: ${reason}` : ""}.`,
+    text: `${providerLabel} connection failed${friendlyReason ? `: ${friendlyReason}` : ""}`,
   }
 }
 
-function googleScopeSummary(account: ConnectedAccount): string[] {
+function googleScopeChips(account: ConnectedAccount): string[] {
   const scopes = account.scopes ?? []
   const labels: string[] = []
   if (scopes.some((s) => s.includes("gmail."))) labels.push("Gmail")
@@ -34,12 +73,20 @@ function googleScopeSummary(account: ConnectedAccount): string[] {
   return labels
 }
 
+function activeRuleCount(account: ConnectedAccount): number {
+  return account.workflowRules.filter((r) => r.enabled).length
+}
+
 export function Connections() {
-  const { user, signOut } = useAuth()
-  const { accounts, loading, isConnected, refresh } = useConnectedAccounts()
+  const { user } = useAuth()
+  const { google, slack, spotify, withings, loading, refresh } =
+    useConnectedAccounts()
   const [searchParams, setSearchParams] = useSearchParams()
-  const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [addDialog, setAddDialog] = useState<Provider | null>(null)
+  const [workflowAccount, setWorkflowAccount] = useState<ConnectedAccount | null>(
+    null
+  )
 
   const banner = useMemo(
     () =>
@@ -52,80 +99,61 @@ export function Connections() {
   )
 
   useEffect(() => {
-    if (banner?.kind === "ok") {
-      refresh()
-    }
+    if (banner?.kind === "ok") refresh()
   }, [banner, refresh])
-
-  const googleAccount = accounts.find((a) => a.provider === GOOGLE_PROVIDER)
-  const googleScopes = googleAccount ? googleScopeSummary(googleAccount) : []
-
-  const handleConnectGoogle = async () => {
-    setError(null)
-    setBusy(true)
-    try {
-      await connectGoogle()
-      // connectGoogle redirects away; no further state changes here.
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to start Google connect")
-      setBusy(false)
-    }
-  }
-
-  const handleDisconnectGoogle = async () => {
-    if (!user) return
-    if (!window.confirm("Disconnect Google? Cached tokens will be deleted.")) return
-    setError(null)
-    setBusy(true)
-    try {
-      await disconnectGoogle(user.id)
-      await refresh()
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Disconnect failed")
-    } finally {
-      setBusy(false)
-    }
-  }
 
   const dismissBanner = () => {
     searchParams.delete("provider")
     searchParams.delete("status")
     searchParams.delete("reason")
+    searchParams.delete("account")
     setSearchParams(searchParams, { replace: true })
   }
 
-  return (
-    <div className="min-h-screen bg-background text-foreground">
-      <header className="border-b border-border">
-        <div className="max-w-6xl mx-auto px-6 py-4 flex items-center justify-between">
-          <div className="flex items-center gap-6">
-            <h1 className="text-xl font-semibold">Jarvis</h1>
-            <nav className="flex items-center gap-4 text-sm">
-              <Link to="/dashboard" className="text-muted-foreground hover:text-foreground">
-                Dashboard
-              </Link>
-              <Link to="/connections" className="font-medium">
-                Connections
-              </Link>
-            </nav>
-          </div>
-          <div className="flex items-center gap-4">
-            <span className="text-sm text-muted-foreground hidden sm:inline">
-              {user?.email}
-            </span>
-            <Button variant="outline" onClick={signOut}>
-              Sign out
-            </Button>
-          </div>
-        </div>
-      </header>
+  const handleAddGoogle = async (label: string) => {
+    await connectGoogle({ label, mode: "add" })
+  }
 
-      <main className="max-w-6xl mx-auto px-6 py-8 space-y-6">
+  const handleAddSlack = async (label: string) => {
+    await connectSlack({ label })
+  }
+
+  const handleAddSpotify = async (label: string) => {
+    await connectSpotify({ label, redirectTo: odinRouteUrl("/connections") })
+  }
+
+  const handleDisconnect = async (account: ConnectedAccount) => {
+    if (!user) return
+    const name =
+      account.accountEmail ?? account.workspaceName ?? account.accountLabel
+    if (!window.confirm(`Disconnect ${name}? Cached tokens will be deleted.`)) {
+      return
+    }
+    setError(null)
+    try {
+      if (account.provider === "google") {
+        await disconnectGoogle(user.id, account.id)
+      } else if (account.provider === "slack") {
+        await disconnectSlack(user.id, account.id)
+      } else if (account.provider === "withings") {
+        await disconnectWithings(user.id, account.id)
+      } else if (account.provider === "spotify") {
+        await disconnectSpotify(user.id, account.id)
+      }
+      await refresh()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Disconnect failed.")
+    }
+  }
+
+  return (
+    <LightPageShell>
+      <div className="mx-auto w-full max-w-[1800px] space-y-10">
         {banner && (
           <div
             className={
               banner.kind === "ok"
-                ? "rounded-md border border-primary/40 bg-primary/10 text-primary px-4 py-3 text-sm flex items-center justify-between"
+                ? "rounded-md border border-gold/40 bg-gold/10 text-gold px-4 py-3 text-sm flex items-center justify-between"
                 : "rounded-md border border-destructive/40 bg-destructive/10 text-destructive px-4 py-3 text-sm flex items-center justify-between"
             }
             role="status"
@@ -150,72 +178,334 @@ export function Connections() {
           </div>
         )}
 
-        <div>
-          <h2 className="text-lg font-semibold">Connect your services</h2>
-          <p className="text-sm text-muted-foreground">
-            Jarvis only reads what you connect. Tokens stay on the server and never
-            reach the browser.
-          </p>
+        <LightPageHeader title="Connect" subtitle="your services" />
+        <p className="-mt-6 max-w-3xl text-2xl font-medium leading-tight text-muted-foreground">
+            ODIN only reads what you connect. Tokens stay on the server and
+            never reach the browser.
+        </p>
+
+        {/* GOOGLE */}
+        <ProviderSection
+          title="GOOGLE ACCOUNTS"
+          addLabel="+ Add Google Account"
+          onAdd={() => setAddDialog("google")}
+        >
+          {loading && google.length === 0 ? (
+            <p className="text-xs text-tertiary py-3">Loading accounts...</p>
+          ) : google.length === 0 ? (
+            <EmptyState
+              text="No Google accounts connected yet."
+              cta="Connect first Google account"
+              onClick={() => setAddDialog("google")}
+            />
+          ) : (
+            <ul className="space-y-2">
+              {google.map((account) => (
+                <AccountRow
+                  key={account.id}
+                  account={account}
+                  primaryLabel={account.accountEmail ?? "Google Account"}
+                  metaLine={googleScopeChips(account).join(" · ")}
+                  rulesCount={activeRuleCount(account)}
+                  onEditWorkflow={() => setWorkflowAccount(account)}
+                  onDisconnect={() => handleDisconnect(account)}
+                />
+              ))}
+            </ul>
+          )}
+        </ProviderSection>
+
+        {/* SLACK */}
+        <ProviderSection
+          title="SLACK WORKSPACES"
+          addLabel="+ Add Workspace"
+          onAdd={() => setAddDialog("slack")}
+        >
+          {loading && slack.length === 0 ? (
+            <p className="text-xs text-tertiary py-3">Loading workspaces...</p>
+          ) : slack.length === 0 ? (
+            <EmptyState
+              text="No Slack workspaces connected yet."
+              cta="Connect first workspace"
+              onClick={() => setAddDialog("slack")}
+            />
+          ) : (
+            <ul className="space-y-2">
+              {slack.map((account) => (
+                <AccountRow
+                  key={account.id}
+                  account={account}
+                  primaryLabel={account.workspaceName ?? "Slack Workspace"}
+                  metaLine="Workspace"
+                  rulesCount={activeRuleCount(account)}
+                  onEditWorkflow={() => setWorkflowAccount(account)}
+                  onDisconnect={() => handleDisconnect(account)}
+                />
+              ))}
+            </ul>
+          )}
+        </ProviderSection>
+
+        {/* WITHINGS */}
+        <ProviderSection
+          title="WITHINGS HEALTH"
+          addLabel="+ Connect Withings"
+          onAdd={() => {
+            setError(null)
+            void connectWithings({ redirectTo: odinRouteUrl("/connections") }).catch(
+              (err) =>
+                setError(
+                  err instanceof Error
+                    ? err.message
+                    : "Failed to start Withings connect."
+                )
+            )
+          }}
+        >
+          {loading && withings.length === 0 ? (
+            <p className="text-xs text-tertiary py-3">Loading health sources...</p>
+          ) : withings.length === 0 ? (
+            <EmptyState
+              text="No Withings account connected yet."
+              cta="Connect Withings"
+              onClick={() => {
+                setError(null)
+                void connectWithings({
+                  redirectTo: odinRouteUrl("/connections"),
+                }).catch((err) =>
+                  setError(
+                    err instanceof Error
+                      ? err.message
+                      : "Failed to start Withings connect."
+                  )
+                )
+              }}
+            />
+          ) : (
+            <ul className="space-y-2">
+              {withings.map((account) => (
+                <AccountRow
+                  key={account.id}
+                  account={account}
+                  primaryLabel={account.workspaceName ?? "Withings"}
+                  metaLine={(account.scopes ?? []).join(" · ")}
+                  rulesCount={activeRuleCount(account)}
+                  onDisconnect={() => handleDisconnect(account)}
+                />
+              ))}
+            </ul>
+          )}
+        </ProviderSection>
+
+        {/* SPOTIFY */}
+        <ProviderSection
+          title="SPOTIFY"
+          addLabel="+ Connect Spotify"
+          onAdd={() => setAddDialog("spotify")}
+          secondaryAction={
+            <Link to="/music" className="text-xs font-bold uppercase tracking-[0.14em] text-[#9b815e] hover:text-[#b6531c]">
+              Music UI
+            </Link>
+          }
+        >
+          {spotify.length === 0 ? (
+            <EmptyState
+              text="No Spotify account connected yet."
+              cta="Connect Spotify"
+              onClick={() => setAddDialog("spotify")}
+            />
+          ) : (
+            <ul className="space-y-2">
+              {spotify.map((account) => (
+                <AccountRow
+                  key={account.id}
+                  account={account}
+                  primaryLabel={account.accountEmail ?? "Spotify"}
+                  metaLine={(account.scopes ?? []).join(" · ")}
+                  rulesCount={activeRuleCount(account)}
+                  onDisconnect={() => handleDisconnect(account)}
+                />
+              ))}
+            </ul>
+          )}
+        </ProviderSection>
+      </div>
+
+      <AddAccountDialog
+        open={addDialog === "google"}
+        onOpenChange={(o) => !o && setAddDialog(null)}
+        provider="google"
+        defaultLabel={google.length === 0 ? "Personal" : ""}
+        onConfirm={handleAddGoogle}
+      />
+      <AddAccountDialog
+        open={addDialog === "slack"}
+        onOpenChange={(o) => !o && setAddDialog(null)}
+        provider="slack"
+        onConfirm={handleAddSlack}
+      />
+      <AddAccountDialog
+        open={addDialog === "spotify"}
+        onOpenChange={(o) => !o && setAddDialog(null)}
+        provider="spotify"
+        defaultLabel={spotify.length === 0 ? "Music" : ""}
+        onConfirm={handleAddSpotify}
+      />
+
+      <WorkflowEditor
+        open={!!workflowAccount}
+        onOpenChange={(o) => !o && setWorkflowAccount(null)}
+        account={workflowAccount}
+        onSaved={() => {
+          refresh()
+        }}
+      />
+    </LightPageShell>
+  )
+}
+
+// ─── Subcomponents ─────────────────────────────────────────────────────────
+
+function ProviderSection({
+  title,
+  addLabel,
+  onAdd,
+  secondaryAction,
+  children,
+}: {
+  title: string
+  addLabel: string
+  onAdd: () => void
+  secondaryAction?: React.ReactNode
+  children: React.ReactNode
+}) {
+  return (
+    <section className="space-y-5">
+      <div className="flex items-end justify-between">
+        <h3 className="text-4xl font-extrabold tracking-[-0.04em] text-foreground">
+          {title
+            .toLowerCase()
+            .replace(/\b\w/g, (char) => char.toUpperCase())}
+        </h3>
+        <div className="flex items-center gap-3">
+          {secondaryAction}
+          <button
+            type="button"
+            onClick={onAdd}
+            className="odin-light-action px-5 py-2 text-sm"
+          >
+            {addLabel}
+          </button>
         </div>
+      </div>
+      <div>{children}</div>
+    </section>
+  )
+}
 
-        {loading ? (
-          <p className="text-sm text-muted-foreground">Loading connected accounts...</p>
-        ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <ProviderCard
-              name="Google"
-              description="Gmail + Calendar + Drive under one consent."
-              connected={isConnected(GOOGLE_PROVIDER)}
-              busy={busy}
-              onConnect={handleConnectGoogle}
-              onDisconnect={handleDisconnectGoogle}
-            >
-              {googleAccount && (
-                <div className="text-xs text-muted-foreground space-y-1">
-                  {(googleAccount.metadata.email as string | undefined) && (
-                    <div>Account: {googleAccount.metadata.email as string}</div>
-                  )}
-                  <div>
-                    Active scopes:{" "}
-                    {googleScopes.length === 0 ? "(none)" : googleScopes.join(", ")}
-                  </div>
-                  <div>
-                    Drive scope not yet granted in Google consent screen. Add{" "}
-                    <code>drive.readonly</code> in the OAuth consent screen and
-                    reconnect to enable.
-                  </div>
-                </div>
-              )}
-              {!googleAccount && (
-                <p className="text-xs text-muted-foreground">
-                  Sign in with your Google account. Testing-mode app — Google may show
-                  an unverified-app warning; click <em>Advanced</em> → <em>Continue</em>.
-                </p>
-              )}
-            </ProviderCard>
-
-            <ProviderCard
-              name="Slack"
-              description="Workspaces, channels, mentions."
-              connected={false}
-              onConnect={() => setError("Slack connector ships in Phase 7.")}
-              onDisconnect={() => {}}
-            >
-              <p className="text-xs text-muted-foreground">Coming in Phase 7.</p>
-            </ProviderCard>
-
-            <ProviderCard
-              name="Spotify"
-              description="Now playing, controls, playlists."
-              connected={false}
-              onConnect={() => setError("Spotify connector ships in Phase 8.")}
-              onDisconnect={() => {}}
-            >
-              <p className="text-xs text-muted-foreground">Coming in Phase 8.</p>
-            </ProviderCard>
+function AccountRow({
+  account,
+  primaryLabel,
+  metaLine,
+  rulesCount,
+  onEditWorkflow,
+  onDisconnect,
+}: {
+  account: ConnectedAccount
+  primaryLabel: string
+  metaLine: string
+  rulesCount: number
+  onEditWorkflow?: () => void
+  onDisconnect: () => void
+}) {
+  return (
+    <li className="odin-light-card rounded-3xl p-7 transition-colors hover:border-border-accent">
+      <div className="flex items-center justify-between gap-5">
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="w-2 h-2 rounded-full bg-success" />
+            <span className="truncate text-2xl font-extrabold tracking-[-0.03em] text-foreground">
+              {primaryLabel}
+            </span>
+            <span className="rounded-full border border-gold px-3 py-1 text-[11px] font-bold uppercase tracking-[0.12em] text-gold">
+              {account.accountLabel}
+            </span>
+            {account.isPrimary && (
+              <span
+                className="flex items-center gap-1 rounded-full border border-gold bg-gold px-3 py-1 text-[11px] font-bold uppercase tracking-[0.12em] text-primary-foreground"
+                title="Primary account"
+              >
+                <Star size={10} /> Primary
+              </span>
+            )}
+            <span className="ml-auto text-[11px] font-bold uppercase tracking-[0.14em] text-success">
+              ● Connected
+            </span>
           </div>
-        )}
-      </main>
+
+          {metaLine && (
+            <p className="mt-2 font-mono-data text-sm text-muted-foreground">
+              {metaLine}
+            </p>
+          )}
+
+          <p className="mt-1 font-mono-data text-sm text-tertiary">
+            Workflow:{" "}
+            {rulesCount > 0
+              ? `${rulesCount} rule${rulesCount === 1 ? "" : "s"} active`
+              : "No rules yet"}
+          </p>
+
+          <div className="mt-4 flex items-center gap-3">
+            {onEditWorkflow && (
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                onClick={onEditWorkflow}
+                className="rounded-full border border-foreground/70 bg-transparent px-4 text-sm font-bold text-foreground hover:bg-secondary"
+              >
+                <SettingsIcon size={12} className="mr-1" />
+                Edit Workflow
+              </Button>
+            )}
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              onClick={onDisconnect}
+              className="text-sm font-semibold text-tertiary hover:text-destructive"
+            >
+              Disconnect
+            </Button>
+          </div>
+        </div>
+      </div>
+    </li>
+  )
+}
+
+function EmptyState({
+  text,
+  cta,
+  onClick,
+}: {
+  text: string
+  cta: string
+  onClick: () => void
+}) {
+  return (
+    <div className="rounded-md border border-dashed border-border bg-surface/30 p-6 text-center space-y-3">
+      <p className="text-sm text-tertiary">{text}</p>
+      <Button
+        type="button"
+        variant="ghost"
+        onClick={onClick}
+        className="text-gold hover:bg-gold/10 border border-gold/40"
+      >
+        <Plus size={14} className="mr-1" />
+        {cta}
+      </Button>
     </div>
   )
 }

@@ -1,5 +1,14 @@
 // Edge Function: oauth-start-google
 // JWT-required. Returns the Google authorize URL with CSRF state stored in auth_state.
+//
+// Body:
+//   { redirect_to?: string, label?: string, mode?: "connect" | "add" }
+//
+// label is persisted alongside the CSRF row so the callback can write it into
+// connected_accounts.account_label.
+//
+// mode="add" forces the Google account chooser so the user can connect a
+// *different* Gmail in addition to one already linked.
 
 // @ts-expect-error Deno std specifier.
 import { serve } from "https://deno.land/std@0.224.0/http/server.ts"
@@ -10,8 +19,6 @@ import { createAuthState } from "../_shared/oauth_state.ts"
 const PROVIDER = "google"
 const AUTHORIZE_URL = "https://accounts.google.com/o/oauth2/v2/auth"
 
-// User has granted these scopes in the Google Cloud consent screen.
-// Adding more here without expanding the consent screen will fail with invalid_scope.
 const SCOPES = [
   "openid",
   "email",
@@ -20,6 +27,8 @@ const SCOPES = [
   "https://www.googleapis.com/auth/userinfo.profile",
   "https://www.googleapis.com/auth/gmail.readonly",
   "https://www.googleapis.com/auth/calendar.readonly",
+  "https://www.googleapis.com/auth/calendar.events",
+  "https://www.googleapis.com/auth/drive.readonly",
 ]
 
 // @ts-expect-error Deno global
@@ -36,6 +45,8 @@ if (!redirectBase) {
 
 interface StartBody {
   redirect_to?: string
+  label?: string
+  mode?: "connect" | "add"
 }
 
 serve(async (req: Request) => {
@@ -52,16 +63,17 @@ serve(async (req: Request) => {
     return jsonResponse({ error: "Unauthorized" }, 401)
   }
 
-  let body: StartBody = {}
-  try {
-    body = await req.json()
-  } catch {
-    body = {}
-  }
+  const body = await req.json().catch(() => ({})) as StartBody
   const redirectTo = body.redirect_to ?? null
+  const label = (body.label ?? "Account").slice(0, 60)
+  const mode = body.mode === "add" ? "add" : "connect"
 
-  const state = await createAuthState(userId, PROVIDER, redirectTo)
+  const state = await createAuthState(userId, PROVIDER, redirectTo, label)
   const callbackUri = `${redirectBase}/oauth-callback-google`
+
+  // Force both consent (refresh_token) and select_account (account chooser)
+  // so adding a second Gmail does not silently reuse the previous session.
+  const prompt = mode === "add" ? "consent select_account" : "consent"
 
   const params = new URLSearchParams({
     client_id: clientId,
@@ -70,7 +82,7 @@ serve(async (req: Request) => {
     scope: SCOPES.join(" "),
     state,
     access_type: "offline",
-    prompt: "consent",
+    prompt,
     include_granted_scopes: "true",
   })
 

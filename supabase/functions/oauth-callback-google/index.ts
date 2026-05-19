@@ -1,7 +1,7 @@
 // Edge Function: oauth-callback-google
 // verify_jwt = false (Google hits this directly).
-// Validates CSRF state, exchanges code for tokens, upserts connected_accounts,
-// then 302-redirects the browser to the SPA.
+// Validates CSRF state, exchanges code for tokens, upserts connected_accounts
+// keyed by (user_id, provider, account_email), then 302-redirects to the SPA.
 
 // @ts-expect-error Deno std specifier.
 import { serve } from "https://deno.land/std@0.224.0/http/server.ts"
@@ -33,10 +33,11 @@ function fail(reason: string, redirectTo: string | null): Response {
   return redirect(target.toString())
 }
 
-function ok(redirectTo: string | null): Response {
+function ok(redirectTo: string | null, accountId: string | null): Response {
   const target = new URL(redirectTo ?? `${appBase}/connections`)
   target.searchParams.set("provider", PROVIDER)
   target.searchParams.set("status", "ok")
+  if (accountId) target.searchParams.set("account", accountId)
   return redirect(target.toString())
 }
 
@@ -99,7 +100,7 @@ serve(async (req: Request) => {
   const expiresAt = new Date(Date.now() + tokenJson.expires_in * 1000).toISOString()
   const scopes = tokenJson.scope ? tokenJson.scope.split(" ") : []
 
-  let providerAccountId: string | null = null
+  let providerEmail: string | null = null
   let userMetadata: Record<string, unknown> = {}
 
   try {
@@ -108,32 +109,43 @@ serve(async (req: Request) => {
     })
     if (userRes.ok) {
       const userInfo = (await userRes.json()) as UserInfo
-      providerAccountId = userInfo.id ?? null
+      providerEmail = userInfo.email ?? null
       userMetadata = {
+        google_user_id: userInfo.id,
         email: userInfo.email,
         name: userInfo.name,
         picture: userInfo.picture,
       }
+    } else {
+      console.warn(
+        "[oauth-callback-google] userinfo returned",
+        userRes.status,
+        await userRes.text()
+      )
     }
   } catch (err) {
     console.warn("[oauth-callback-google] userinfo fetch failed:", err)
   }
 
+  if (!providerEmail) {
+    return fail("userinfo_missing_email", consumed.redirect_to)
+  }
+
   try {
-    await upsertProviderTokens({
+    const result = await upsertProviderTokens({
       user_id: consumed.user_id,
       provider: PROVIDER,
-      provider_account_id: providerAccountId,
+      account_email: providerEmail,
+      account_label: consumed.account_label ?? "Account",
       access_token: tokenJson.access_token,
       refresh_token: tokenJson.refresh_token ?? null,
       token_expires_at: expiresAt,
       scopes,
       metadata: userMetadata,
     })
+    return ok(consumed.redirect_to, result.id)
   } catch (err) {
     console.error("[oauth-callback-google] Failed to persist tokens:", err)
     return fail("persistence_failed", consumed.redirect_to)
   }
-
-  return ok(consumed.redirect_to)
 })

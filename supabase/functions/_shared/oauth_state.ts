@@ -13,7 +13,8 @@ function randomState(): string {
 export async function createAuthState(
   userId: string,
   provider: string,
-  redirectTo: string | null
+  redirectTo: string | null,
+  accountLabel: string | null = null
 ): Promise<string> {
   const state = randomState()
   const admin = getAdminClient()
@@ -22,6 +23,7 @@ export async function createAuthState(
     user_id: userId,
     provider,
     redirect_to: redirectTo,
+    account_label: accountLabel,
   })
   if (error) throw new Error(`Failed to persist auth_state: ${error.message}`)
   return state
@@ -31,6 +33,7 @@ export interface ConsumedState {
   user_id: string
   provider: string
   redirect_to: string | null
+  account_label: string | null
 }
 
 export async function consumeAuthState(
@@ -40,7 +43,7 @@ export async function consumeAuthState(
   const admin = getAdminClient()
   const { data, error } = await admin
     .from("auth_state")
-    .select("user_id, provider, redirect_to, created_at")
+    .select("user_id, provider, redirect_to, account_label, created_at")
     .eq("state", state)
     .eq("provider", provider)
     .maybeSingle()
@@ -53,7 +56,6 @@ export async function consumeAuthState(
     return null
   }
 
-  // Best-effort cleanup of the consumed row + any stale state.
   await admin
     .from("auth_state")
     .delete()
@@ -67,5 +69,6 @@ export async function consumeAuthState(
     user_id: data.user_id,
     provider: data.provider,
     redirect_to: data.redirect_to,
+    account_label: data.account_label ?? null,
   }
 }

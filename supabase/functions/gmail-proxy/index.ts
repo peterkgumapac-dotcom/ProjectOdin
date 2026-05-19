@@ -1,7 +1,6 @@
 // Edge Function: gmail-proxy
-// JWT-required. Routes Gmail API actions on behalf of the caller.
-// v1 ships with read scopes only. Mutation actions are stubs that 403 until
-// the user expands their Google consent screen with gmail.send / gmail.modify.
+// JWT-required. Routes Gmail API actions on behalf of the caller, scoped to
+// a specific connected Google account via optional `account_id` in the body.
 
 // @ts-expect-error Deno std specifier.
 import { serve } from "https://deno.land/std@0.224.0/http/server.ts"
@@ -25,10 +24,15 @@ interface GetMessageParams {
 
 interface ActionBody {
   action: string
+  account_id?: string | null
   params?: Record<string, unknown>
 }
 
-async function listMessages(userId: string, params: ListMessagesParams) {
+async function listMessages(
+  userId: string,
+  accountId: string | null,
+  params: ListMessagesParams
+) {
   const qs = new URLSearchParams()
   if (params.q) qs.set("q", params.q)
   if (params.maxResults) qs.set("maxResults", String(params.maxResults))
@@ -36,10 +40,14 @@ async function listMessages(userId: string, params: ListMessagesParams) {
   if (params.labelIds) {
     for (const id of params.labelIds) qs.append("labelIds", id)
   }
-  return googleFetchJson(userId, `${BASE}/messages?${qs.toString()}`)
+  return googleFetchJson(userId, `${BASE}/messages?${qs.toString()}`, {}, accountId)
 }
 
-async function getMessage(userId: string, params: GetMessageParams) {
+async function getMessage(
+  userId: string,
+  accountId: string | null,
+  params: GetMessageParams
+) {
   if (!params.id) throw new Error("id is required")
   const format = params.format ?? "metadata"
   const qs = new URLSearchParams({ format })
@@ -49,17 +57,31 @@ async function getMessage(userId: string, params: GetMessageParams) {
     qs.append("metadataHeaders", "Subject")
     qs.append("metadataHeaders", "Date")
   }
-  return googleFetchJson(userId, `${BASE}/messages/${params.id}?${qs.toString()}`)
+  return googleFetchJson(
+    userId,
+    `${BASE}/messages/${params.id}?${qs.toString()}`,
+    {},
+    accountId
+  )
 }
 
-async function search(userId: string, params: { q: string; maxResults?: number }) {
-  return listMessages(userId, { q: params.q, maxResults: params.maxResults ?? 20 })
+async function search(
+  userId: string,
+  accountId: string | null,
+  params: { q: string; maxResults?: number }
+) {
+  return listMessages(userId, accountId, {
+    q: params.q,
+    maxResults: params.maxResults ?? 20,
+  })
 }
 
-async function unreadCount(userId: string) {
+async function unreadCount(userId: string, accountId: string | null) {
   const data = await googleFetchJson<{ messagesTotal?: number; messagesUnread?: number }>(
     userId,
-    `${BASE}/labels/INBOX`
+    `${BASE}/labels/INBOX`,
+    {},
+    accountId
   )
   return {
     inbox_total: data.messagesTotal ?? 0,
@@ -67,8 +89,8 @@ async function unreadCount(userId: string) {
   }
 }
 
-async function profile(userId: string) {
-  return googleFetchJson(userId, `${BASE}/profile`)
+async function profile(userId: string, accountId: string | null) {
+  return googleFetchJson(userId, `${BASE}/profile`, {}, accountId)
 }
 
 serve(async (req: Request) => {
@@ -85,20 +107,31 @@ serve(async (req: Request) => {
     return jsonResponse({ error: "Invalid JSON body" }, 400)
   }
   const action = body.action
+  const accountId = body.account_id ?? null
   const params = body.params ?? {}
 
   try {
     switch (action) {
       case "list_messages":
-        return jsonResponse({ data: await listMessages(userId, params as ListMessagesParams) })
+        return jsonResponse({
+          data: await listMessages(userId, accountId, params as ListMessagesParams),
+        })
       case "get_message":
-        return jsonResponse({ data: await getMessage(userId, params as GetMessageParams) })
+        return jsonResponse({
+          data: await getMessage(userId, accountId, params as GetMessageParams),
+        })
       case "search":
-        return jsonResponse({ data: await search(userId, params as { q: string; maxResults?: number }) })
+        return jsonResponse({
+          data: await search(
+            userId,
+            accountId,
+            params as { q: string; maxResults?: number }
+          ),
+        })
       case "unread_count":
-        return jsonResponse({ data: await unreadCount(userId) })
+        return jsonResponse({ data: await unreadCount(userId, accountId) })
       case "profile":
-        return jsonResponse({ data: await profile(userId) })
+        return jsonResponse({ data: await profile(userId, accountId) })
       case "send_message":
       case "mark_read":
       case "archive":

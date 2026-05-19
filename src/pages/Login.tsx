@@ -12,6 +12,7 @@ import {
 } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { MusicBoxWidget } from "@/components/dashboard/MusicBoxWidget"
 
 type Mode = "signin" | "signup"
 
@@ -45,7 +46,7 @@ export function Login() {
       setInfo("Check your email to confirm your account.")
       return
     }
-    navigate("/dashboard", { replace: true })
+    navigate("/dashboard?portal=open", { replace: true })
   }
 
   const handleMagicLink = async (e: FormEvent) => {
@@ -63,18 +64,26 @@ export function Login() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-background p-4">
-      <Card className="w-full max-w-md">
-        <CardHeader>
-          <CardTitle className="text-2xl">Jarvis</CardTitle>
-          <CardDescription>Your personal command center.</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <Tabs defaultValue="password" className="w-full">
-            <TabsList className="grid grid-cols-2 w-full">
-              <TabsTrigger value="password">Password</TabsTrigger>
-              <TabsTrigger value="magic">Magic link</TabsTrigger>
-            </TabsList>
+    <div className="min-h-screen bg-background p-4">
+      <div className="mx-auto grid min-h-[calc(100vh-2rem)] w-full max-w-5xl items-center gap-6 lg:grid-cols-[minmax(0,1fr)_360px]">
+        <Card className="w-full max-w-md glass-card justify-self-center">
+          <CardHeader className="text-center">
+            <CardTitle className="text-3xl font-display tracking-[0.4em] text-gold">
+              ODIN
+            </CardTitle>
+            <CardDescription className="font-display tracking-[0.25em] text-tertiary mt-1">
+              GUMAPAC OPERATIONS
+            </CardDescription>
+            <p className="text-xs text-muted-foreground mt-3">
+              All-seeing operations intelligence.
+            </p>
+          </CardHeader>
+          <CardContent>
+            <Tabs defaultValue="password" className="w-full">
+              <TabsList className="grid grid-cols-2 w-full">
+                <TabsTrigger value="password">Password</TabsTrigger>
+                <TabsTrigger value="magic">Magic link</TabsTrigger>
+              </TabsList>
 
             <TabsContent value="password">
               <form onSubmit={handlePassword} className="space-y-4 pt-4">
@@ -140,11 +149,15 @@ export function Login() {
               {error}
             </p>
           )}
-          {info && !error && (
-            <p className="text-sm text-muted-foreground mt-4">{info}</p>
-          )}
-        </CardContent>
-      </Card>
+            {info && !error && (
+              <p className="text-sm text-muted-foreground mt-4">{info}</p>
+            )}
+          </CardContent>
+        </Card>
+        <div className="w-full max-w-md justify-self-center lg:max-w-none">
+          <MusicBoxWidget variant="lock" />
+        </div>
+      </div>
     </div>
   )
 }

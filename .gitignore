@@ -10,6 +10,9 @@ lerna-debug.log*
 node_modules
 dist
 dist-ssr
+output/
+release/
+tmp/
 *.local
 
 # Env
@@ -35,3 +38,16 @@ dist-ssr
 .supabase
 supabase/.temp/
 supabase/.branches/
+
+# ODIN local browser worker profile
+.odin/
+
+# Local browser/test artifacts
+.playwright-cli/
+
+# Debug screenshots and scratch dirs
+.tmp-*
+.tmp-notch/
+
+# Native build artifacts
+electron/native/build/

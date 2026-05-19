@@ -2,9 +2,16 @@ import { createContext, useContext, useEffect, useMemo, useState } from "react"
 import type { ReactNode } from "react"
 import type { Session } from "@supabase/supabase-js"
 import { supabase } from "@/lib/supabaseClient"
+import { odinRouteUrl } from "@/lib/desktopRoute"
 import type { AuthContextValue, AuthResult } from "@/types/auth"
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined)
+const localAuthEmail = import.meta.env.DEV
+  ? import.meta.env.VITE_ODIN_LOCAL_AUTH_EMAIL
+  : undefined
+const localAuthPassword = import.meta.env.DEV
+  ? import.meta.env.VITE_ODIN_LOCAL_AUTH_PASSWORD
+  : undefined
 
 function toAuthError(err: unknown): Error | null {
   if (!err) return null
@@ -17,11 +24,43 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
+    const sessionForNotch = session
+      ? {
+          access_token: session.access_token,
+          refresh_token: session.refresh_token,
+          user: session.user,
+        }
+      : null
+    void window.odinDesktop?.exportSession?.(sessionForNotch)
+  }, [session])
+
+  useEffect(() => {
     let mounted = true
 
-    supabase.auth.getSession().then(({ data }) => {
+    supabase.auth.getSession().then(async ({ data }) => {
       if (!mounted) return
-      setSession(data.session)
+      if (data.session) {
+        setSession(data.session)
+        setLoading(false)
+        return
+      }
+
+      if (localAuthEmail && localAuthPassword) {
+        const { data: signInData, error } = await supabase.auth.signInWithPassword({
+          email: localAuthEmail,
+          password: localAuthPassword,
+        })
+        if (!mounted) return
+        if (!error) {
+          setSession(signInData.session)
+        } else {
+          console.warn("[ODIN] Local auto sign-in failed:", error.message)
+        }
+        setLoading(false)
+        return
+      }
+
+      setSession(null)
       setLoading(false)
     })
 
@@ -29,9 +68,27 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setSession(newSession)
     })
 
+    const handleSessionExpired = () => {
+      if (!mounted) return
+      void supabase.auth.signOut().catch(() => {
+        // Even if signOut fails (offline), clear local state so the UI bounces.
+      })
+      setSession(null)
+      if (typeof window !== "undefined" && window.location.pathname !== "/login") {
+        const hash = window.location.hash || ""
+        if (hash.startsWith("#/")) {
+          window.location.hash = "#/login"
+        } else {
+          window.location.assign("/login")
+        }
+      }
+    }
+    window.addEventListener("odin:session-expired", handleSessionExpired)
+
     return () => {
       mounted = false
       sub.subscription.unsubscribe()
+      window.removeEventListener("odin:session-expired", handleSessionExpired)
     }
   }, [])
 
@@ -49,7 +106,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const signInWithMagicLink = async (email: string): Promise<AuthResult> => {
       const { error } = await supabase.auth.signInWithOtp({
         email,
-        options: { emailRedirectTo: `${window.location.origin}/dashboard` },
+        options: { emailRedirectTo: odinRouteUrl("/dashboard") },
       })
       return { error: toAuthError(error) }
     }

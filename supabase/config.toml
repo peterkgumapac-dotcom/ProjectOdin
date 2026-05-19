@@ -11,3 +11,12 @@ verify_jwt = false
 
 [functions.oauth-callback-spotify]
 verify_jwt = false
+
+[functions.oauth-callback-withings]
+verify_jwt = false
+
+[functions.odin-orchestrator]
+verify_jwt = false
+
+[functions.odin-post-call]
+verify_jwt = false

@@ -35,22 +35,39 @@ export interface GmailProfile {
   threadsTotal: number
 }
 
-export function unreadCount() {
-  return invokeProxy<UnreadCount>(FN, "unread_count")
+export function unreadCount(accountId?: string | null) {
+  return invokeProxy<UnreadCount>(FN, "unread_count", {}, accountId ?? null)
 }
 
-export function profile() {
-  return invokeProxy<GmailProfile>(FN, "profile")
+export function profile(accountId?: string | null) {
+  return invokeProxy<GmailProfile>(FN, "profile", {}, accountId ?? null)
 }
 
-export function listMessages(params: { maxResults?: number; q?: string }) {
-  return invokeProxy<GmailListResponse>(FN, "list_messages", params)
+export function listMessages(
+  params: { maxResults?: number; q?: string },
+  accountId?: string | null
+) {
+  return invokeProxy<GmailListResponse>(FN, "list_messages", params, accountId ?? null)
 }
 
-export function getMessage(id: string, format: "metadata" | "full" = "metadata") {
-  return invokeProxy<GmailMessage>(FN, "get_message", { id, format })
+export function getMessage(
+  id: string,
+  format: "metadata" | "full" = "metadata",
+  accountId?: string | null
+) {
+  return invokeProxy<GmailMessage>(
+    FN,
+    "get_message",
+    { id, format },
+    accountId ?? null
+  )
 }
 
-export function search(q: string, maxResults = 20) {
-  return invokeProxy<GmailListResponse>(FN, "search", { q, maxResults })
+export function search(q: string, maxResults = 20, accountId?: string | null) {
+  return invokeProxy<GmailListResponse>(
+    FN,
+    "search",
+    { q, maxResults },
+    accountId ?? null
+  )
 }
