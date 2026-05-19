@@ -1,7 +1,13 @@
 {
+  "crons": [
+    {
+      "path": "/api/odin-runner/process-jobs",
+      "schedule": "*/5 * * * *"
+    }
+  ],
   "rewrites": [
     {
-      "source": "/(.*)",
+      "source": "/((?!api/).*)",
       "destination": "/index.html"
     }
   ]
