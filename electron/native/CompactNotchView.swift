@@ -65,11 +65,11 @@ struct CompactNotchView: View {
     static func windowSize(for geo: NotchGeometry, mode: NotchMode) -> CGSize {
         switch mode {
         case .resting:
-            return CGSize(width: clamp(geo.notchWidth + 54, min: 218, max: 280), height: max(44, geo.notchHeight + 8))
+            return CGSize(width: clamp(geo.notchWidth + 60, min: 218, max: 300), height: max(44, geo.notchHeight + 8))
         case .music:
-            return CGSize(width: clamp(geo.notchWidth + 120, min: 270, max: 335), height: max(46, geo.notchHeight + 8))
+            return CGSize(width: clamp(geo.notchWidth + 80, min: 240, max: 320), height: max(46, geo.notchHeight + 8))
         case .musicPeek:
-            return CGSize(width: clamp(geo.notchWidth + 170, min: 300, max: 390), height: max(70, geo.notchHeight + 32))
+            return CGSize(width: clamp(geo.notchWidth + 120, min: 280, max: 360), height: max(70, geo.notchHeight + 32))
         case .meeting, .calendarBrowse:
             return CGSize(width: clamp(geo.notchWidth + 250, min: 380, max: 500), height: max(78, geo.notchHeight + 40))
         case .fullAccess:
@@ -128,11 +128,23 @@ struct CompactNotchView: View {
 
     @ViewBuilder
     private func surface<Content: View>(@ViewBuilder content: () -> Content) -> some View {
+        let panelWidth = Self.windowSize(for: geometry, mode: mode).width
+        let notchInsetFromLeft = max(0, (panelWidth - geometry.notchWidth) / 2)
+        let bottomR: CGFloat = (mode == .resting || mode == .music) ? 20 : 28
+        let topR: CGFloat = 11
+
+        let shape = NotchShape(
+            bottomCornerRadius: bottomR,
+            topCornerRadius: topR,
+            notchInsetFromLeft: notchInsetFromLeft,
+            notchWidth: geometry.notchWidth
+        )
+
         ZStack {
-            NotchShape(bottomCornerRadius: (mode == .resting || mode == .music) ? 20 : 28)
+            shape
                 .fill(Color.black)
                 .shadow(color: Color.black.opacity(mode == .resting ? 0.55 : 0.72), radius: mode == .resting ? 10 : 18, x: 0, y: mode == .resting ? 7 : 11)
-                .clipShape(NotchShape(bottomCornerRadius: (mode == .resting || mode == .music) ? 20 : 28))
+                .clipShape(shape)
 
             content()
                 .padding(.horizontal, (mode == .music || mode == .musicPeek) ? 0 : (mode == .resting ? 12 : 16))
