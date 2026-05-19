@@ -1133,8 +1133,15 @@ if (!gotSingleInstanceLock) {
 } else {
   app.on("second-instance", (_event, argv) => {
     const protocolUrl = argv.find((arg) => isOdinProtocolUrl(arg))
-    const route = protocolUrl ? routeFromOdinProtocol(protocolUrl) : null
-    openProtocolRoute(route ?? DEFAULT_DESKTOP_ROUTE)
+    if (protocolUrl) {
+      const route = routeFromOdinProtocol(protocolUrl)
+      if (route) {
+        openProtocolRoute(route)
+        return
+      }
+    }
+    positionIslandWindow()
+    void showIslandWindow()
   })
 }
 
