@@ -25,6 +25,10 @@ clear_signing_blocking_xattrs() {
     xattr -d 'com.apple.fileprovider.fpfs#P' "$item" 2>/dev/null || true
     xattr -d com.apple.provenance "$item" 2>/dev/null || true
     xattr -c "$item" 2>/dev/null || true
+    xattr -s -d com.apple.FinderInfo "$item" 2>/dev/null || true
+    xattr -s -d 'com.apple.fileprovider.fpfs#P' "$item" 2>/dev/null || true
+    xattr -s -d com.apple.provenance "$item" 2>/dev/null || true
+    xattr -s -c "$item" 2>/dev/null || true
   done < <(find "$target" -depth -print0)
 
   xattr -d com.apple.FinderInfo "$target" 2>/dev/null || true
@@ -113,6 +117,8 @@ fi
 xattr -rd com.apple.provenance "$APP_DIR" 2>/dev/null || true
 xattr -rd com.apple.FinderInfo "$APP_DIR" 2>/dev/null || true
 xattr -rd 'com.apple.fileprovider.fpfs#P' "$APP_DIR" 2>/dev/null || true
+clear_signing_blocking_xattrs "$APP_DIR"
+xattr -cr "$APP_DIR" 2>/dev/null || true
 codesign --force --deep --sign - "$APP_DIR"
 
 echo "$APP_DIR"
