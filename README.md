@@ -1,5 +1,23 @@
 # React + TypeScript + Vite
 
+## Odin Notch (apps/odin-notch)
+
+From the monorepo root:
+
+```bash
+cd /Users/peterkarlgumapac/Documents/ProjectOdin
+swift build --package-path apps/odin-notch
+swift run --package-path apps/odin-notch
+```
+
+To create the app bundle from the monorepo root:
+
+```bash
+cd /Users/peterkarlgumapac/Documents/ProjectOdin
+cd apps/odin-notch
+scripts/build-app.sh
+```
+
 This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
 
 Currently, two official plugins are available:
