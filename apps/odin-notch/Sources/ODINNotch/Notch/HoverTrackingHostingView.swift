@@ -9,7 +9,7 @@ final class HoverTrackingHostingView<Content: View>: NSHostingView<Content> {
     var onFileDrop: (([URL]) -> Void)?
     private var trackingAreaRef: NSTrackingArea?
 
-    required override init(rootView: Content) {
+    required init(rootView: Content) {
         super.init(rootView: rootView)
         registerForDraggedTypes([.fileURL])
     }
